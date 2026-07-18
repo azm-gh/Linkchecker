@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Link Checker</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>Asyncio <span>Link Checker</span></h1>
+            <p>High-performance, concurrent web crawler powered by Python.</p>
+        </header>
+
+        <main>
+            <div class="glass-card controls-card">
+                <form id="scan-form">
+                    <div class="input-group">
+                        <label for="url">Target URL</label>
+                        <input type="url" id="url" placeholder="https://example.com" required>
+                    </div>
+                    
+                    <div class="sliders-row">
+                        <div class="input-group slider-group">
+                            <label for="concurrency">Concurrency: <span id="concurrency-val">50</span></label>
+                            <input type="range" id="concurrency" min="1" max="100" value="50">
+                        </div>
+                        <div class="input-group slider-group">
+                            <label for="delay">Delay (s): <span id="delay-val">0.0</span></label>
+                            <input type="range" id="delay" min="0" max="5" step="0.1" value="0.0">
+                        </div>
+                    </div>
+
+                    <button type="submit" id="scan-btn">
+                        <span class="btn-text">Start Scan</span>
+                        <div class="loader hidden"></div>
+                    </button>
+                </form>
+            </div>
+
+            <div class="status-message" id="status-message"></div>
+
+            <div class="glass-card summary-card hidden" id="summary-card">
+                <div class="stat-box">
+                    <h3>Total Found</h3>
+                    <p id="stat-total">0</p>
+                </div>
+                <div class="stat-box stat-alive">
+                    <h3>Alive (200 OK)</h3>
+                    <p id="stat-alive">0</p>
+                </div>
+                <div class="stat-box stat-dead">
+                    <h3>Dead / Error</h3>
+                    <p id="stat-dead">0</p>
+                </div>
+                <div class="stat-box">
+                    <h3>Total Time</h3>
+                    <p id="stat-time">-</p>
+                </div>
+            </div>
+
+            <div class="table-container hidden" id="results-container">
+                <table id="results-table">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Response Time</th>
+                            <th>URL</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <!-- Rows injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
