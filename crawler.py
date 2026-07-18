@@ -35,6 +35,18 @@ def extract_links(html_content, base_url):
                 links.add(full_url)
     return list(links)
 
+def extract_sitemap_links(xml_content):
+    """Extracts URLs from an XML sitemap."""
+    soup = BeautifulSoup(xml_content, 'xml')
+    links = set()
+    for loc in soup.find_all('loc'):
+        url = loc.text.strip()
+        parsed_url = urlparse(url)
+        if parsed_url.scheme in ('http', 'https'):
+            if not security.is_domain_blocked(url):
+                links.add(url)
+    return list(links)
+
 async def check_single_link(target_url, source_url, session, semaphore, timeout=10, on_progress=None):
     """Checks a single link, saves to DB, and triggers progress callback."""
     status_code = None
@@ -106,7 +118,7 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
     
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            html = await fetch_html(start_url, session)
+            content = await fetch_html(start_url, session)
         except Exception as e:
             if on_init:
                 if asyncio.iscoroutinefunction(on_init):
@@ -115,12 +127,19 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
                     on_init({"error": str(e)})
             return {"error": str(e)}
             
-        links = extract_links(html, start_url)
+        is_xml = start_url.lower().endswith('.xml') or content.strip().startswith('<?xml') or '<urlset' in content
+        
+        if is_xml:
+            links = extract_sitemap_links(content)
+            source_type = "XML Sitemap"
+        else:
+            links = extract_links(content, start_url)
+            source_type = "HTML Page"
         
         if on_init:
             init_data = {
                 "total_links": len(links), 
-                "message": f"Found {len(links)} unique HTTP/HTTPS links (Security Concurrency Cap: {safe_concurrency})"
+                "message": f"Found {len(links)} URLs in {source_type} (Security Concurrency Cap: {safe_concurrency})"
             }
             if asyncio.iscoroutinefunction(on_init):
                 await on_init(init_data)

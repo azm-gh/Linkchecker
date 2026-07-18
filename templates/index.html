@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Antigravity Link Checker</title>
+    <title>Link Checker</title>
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 </head>
@@ -15,7 +15,7 @@
 
     <div class="container">
         <header>
-            <h1>Asyncio <span>Link Checker</span></h1>
+            <h1><span>Link Checker</span></h1>
             <p>High-performance, concurrent web crawler powered by Python.</p>
         </header>
 
@@ -29,11 +29,15 @@
                     
                     <div class="sliders-row">
                         <div class="input-group slider-group">
-                            <label for="concurrency">Concurrency: <span id="concurrency-val">50</span></label>
+                            <label for="concurrency" title="Limits how many requests happen at the exact same millisecond. Helps avoid instant bans.">
+                                Scan Speed (Simultaneous Connections): <span id="concurrency-val">50</span>
+                            </label>
                             <input type="range" id="concurrency" min="1" max="100" value="50">
                         </div>
                         <div class="input-group slider-group">
-                            <label for="delay">Delay (s): <span id="delay-val">0.0</span></label>
+                            <label for="delay" title="Pauses the engine before firing the next batch of requests. Essential for bypassing rate limits.">
+                                Request Pacing (Delay in seconds): <span id="delay-val">0.0</span>
+                            </label>
                             <input type="range" id="delay" min="0" max="5" step="0.1" value="0.0">
                         </div>
                     </div>

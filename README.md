@@ -1,4 +1,4 @@
-# Antigravity Link Checker
+# Link Checker
 
 A high-performance, full-stack asynchronous web link checker built with Python's `asyncio`, `aiohttp`, and a real-time **FastAPI** web interface. 
 
