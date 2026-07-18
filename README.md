@@ -1,17 +1,20 @@
-# Asyncio Broken Link Checker
+# Antigravity Link Checker
 
-A high-performance, asynchronous web link checker built with Python's `asyncio` and `aiohttp`. It extracts all links from a given webpage, concurrently verifies their status, evades basic bot protections, and persists detailed analytics into an SQLite database.
+A high-performance, full-stack asynchronous web link checker built with Python's `asyncio`, `aiohttp`, and a real-time **FastAPI** web interface. 
 
-## Features
+It extracts links from standard webpages or massive XML Sitemaps, concurrently verifies their status, evades basic bot protections, and persists detailed analytics into an SQLite database.
 
-*   **Lightning Fast:** Uses `asyncio` to check dozens of links concurrently instead of waiting for each server to respond sequentially.
-*   **Bot Protection Evasion:** Automatically sends a standard browser `User-Agent` to prevent `403 Forbidden` errors from strict web servers.
-*   **Global Rate Limiting:** Implements a configurable delay (`-d`) to stagger requests and avoid `429 Too Many Requests` bans.
-*   **Smart Timeout Handling:** Automatically falls back from `HEAD` to `GET` requests when needed, and enforces a strict 10-second timeout on slow servers.
-*   **SQLite Persistence:** All results, including response times, source URLs, and status codes, are saved to a local `links.db` database for powerful analytics.
-*   **Color-Coded CLI:** Beautiful terminal output using `colorama`.
+## 🚀 Features
 
-## Installation
+*   **Real-time Web UI:** A stunning, modern web interface powered by WebSockets. Watch the results stream in live as the engine audits your links.
+*   **XML Sitemap Auditing:** Feed it a `.xml` file, and it automatically parses the `<loc>` tags to audit an entire website in one click.
+*   **Lightning Fast Concurrency:** Uses `asyncio` to check dozens of links simultaneously instead of waiting for each server sequentially.
+*   **Bot Evasion & Pacing:** Implement configurable dispatch delays (Request Pacing) to stagger requests and avoid `429 Too Many Requests` bans.
+*   **Security & Blocklists:** Built-in safeguards automatically skip massive domains that block bots (like LinkedIn and Amazon) and strictly cap concurrency to prevent SSRF abuse.
+*   **SQLite Persistence:** All results, including millisecond response times, source URLs, and status codes, are saved to a local `links.db` database for powerful analytics.
+*   **CLI Fallback:** Still prefer the terminal? A fully functional command-line interface with `colorama` output is included.
+
+## 🛠 Installation
 
 1. Clone or download this repository.
 2. Create and activate a Python virtual environment:
@@ -24,29 +27,40 @@ A high-performance, asynchronous web link checker built with Python's `asyncio` 
    pip install -r requirements.txt
    ```
 
-## Usage
+## 🌐 Usage (Web Interface)
 
-Run the `checker.py` script and pass the target URL:
+The best way to use the Link Checker is via the real-time FastAPI web interface.
+
+1. Start the web server:
+   ```bash
+   uvicorn app:app --host 127.0.0.1 --port 8000
+   ```
+2. Open your browser to `http://127.0.0.1:8000`.
+3. Enter your target URL (HTML page or `sitemap.xml`) and click **Start Scan**.
+
+## 💻 Usage (Command Line)
+
+If you prefer the terminal, you can run the core engine directly:
 
 ```bash
-python checker.py https://example.com
+# Check an HTML page
+python cli.py https://example.com
+
+# Check an entire Sitemap
+python cli.py https://example.com/sitemap.xml
 ```
 
-### Advanced Options
-
-You can control the concurrency limit (max simultaneous connections) and the delay (staggering between requests):
-
-```bash
-# Set max concurrency to 20, and wait 0.5 seconds between dispatching each request
-python checker.py https://example.com -c 20 -d 0.5
-```
-
+### Advanced CLI Options
 *   `-c` / `--concurrency`: Limits the maximum number of requests "in flight" at the same time (Default: 50).
 *   `-d` / `--delay`: The delay in seconds before firing the next background task. Excellent for bypassing rate limits (Default: 0.0).
 
-## Analytics & Database
+```bash
+python cli.py https://example.com -c 20 -d 0.5
+```
 
-Every time you run the script, it appends the results to `links.db`. You can open this database with any standard SQLite viewer or query it directly from your terminal:
+## 📊 Analytics & Database
+
+Every scan automatically appends the results to `links.db`. You can open this database with any standard SQLite viewer or query it directly from your terminal:
 
 ```bash
 # Find the 5 slowest links on your site:
@@ -56,8 +70,11 @@ sqlite3 links.db "SELECT target_url, response_time_ms FROM link_checks ORDER BY 
 sqlite3 links.db "SELECT target_url FROM link_checks WHERE status_code = 404;"
 ```
 
-## Project Structure
+## 📂 Project Structure
 
-*   `checker.py`: The main asynchronous crawler logic.
+*   `crawler.py`: The core asynchronous `asyncio` crawling engine.
+*   `app.py`: The FastAPI backend handling WebSockets.
+*   `cli.py`: The Command-Line interface wrapper.
 *   `db.py`: Handles SQLite database initialization and data insertion.
-*   `requirements.txt`: Python dependencies.
+*   `security.py`: Domain blocklists and SSRF concurrency caps.
+*   `templates/` & `static/`: HTML, CSS, and JS for the web interface.
