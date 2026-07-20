@@ -57,59 +57,74 @@ def extract_sitemap_links(xml_content):
             links.add(url)
     return list(links)
 
-async def check_single_link(target_url, source_url, session, semaphore, timeout=10, on_progress=None, user_id=None, initial_delay=0.0):
+async def check_single_link(target_url, source_url, session, timeout=10, on_progress=None, user_id=None):
     """Checks a single link, saves to DB, and triggers progress callback."""
-    if initial_delay > 0:
-        await asyncio.sleep(initial_delay)
-        
     status_code = None
     error_message = None
     is_alive = False
     
-    async with semaphore:
-        start_time = time.time()
-        client_timeout = aiohttp.ClientTimeout(total=timeout)
-        try:
-            async with session.head(target_url, allow_redirects=True, timeout=client_timeout) as response:
+    start_time = time.time()
+    client_timeout = aiohttp.ClientTimeout(total=timeout)
+    try:
+        async with session.head(target_url, allow_redirects=True, timeout=client_timeout) as response:
+            status_code = response.status
+            
+        if status_code == 405:
+            async with session.get(target_url, allow_redirects=True, timeout=client_timeout) as response:
                 status_code = response.status
                 
-            if status_code == 405:
-                async with session.get(target_url, allow_redirects=True, timeout=client_timeout) as response:
-                    status_code = response.status
-                    
-            if 200 <= status_code < 400:
-                is_alive = True
-                
-        except asyncio.TimeoutError:
-            error_message = "Timeout"
-        except Exception as e:
-            error_message = type(e).__name__
-        finally:
-            end_time = time.time()
-            response_time_ms = int((end_time - start_time) * 1000)
+        if 200 <= status_code < 400:
+            is_alive = True
             
-            # Persist to database
-            db.save_link_check(
-                target_url=target_url,
-                source_url=source_url,
-                status_code=status_code,
-                error_message=error_message,
-                is_alive=is_alive,
-                response_time_ms=response_time_ms,
+    except asyncio.TimeoutError:
+        error_message = "Timeout"
+    except Exception as e:
+        error_message = type(e).__name__
+    finally:
+        end_time = time.time()
+        response_time_ms = int((end_time - start_time) * 1000)
+        
+        # Persist to database
+        db.save_link_check(
+            target_url=target_url,
+            source_url=source_url,
+            status_code=status_code,
+            error_message=error_message,
+            is_alive=is_alive,
+            response_time_ms=response_time_ms,
+            user_id=user_id
+        )
+        
+        result = {
+            "target_url": target_url,
+            "status_code": status_code,
+            "error_message": error_message,
+            "is_alive": is_alive,
+            "response_time_ms": response_time_ms
+        }
+        
+        await fire_callback(on_progress, result)
+        
+        return is_alive
+
+async def crawler_worker(queue, source_url, session, on_progress, user_id, delay, results_list):
+    """Worker task that constantly pulls URLs from the queue."""
+    while True:
+        target_url = await queue.get()
+        try:
+            is_alive = await check_single_link(
+                target_url=target_url, 
+                source_url=source_url, 
+                session=session, 
+                on_progress=on_progress, 
                 user_id=user_id
             )
+            results_list.append(is_alive)
             
-            result = {
-                "target_url": target_url,
-                "status_code": status_code,
-                "error_message": error_message,
-                "is_alive": is_alive,
-                "response_time_ms": response_time_ms
-            }
-            
-            await fire_callback(on_progress, result)
-            
-            return is_alive
+            if delay > 0:
+                await asyncio.sleep(delay)
+        finally:
+            queue.task_done()
 
 async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_init=None, user_id=None):
     """Core engine that coordinates the crawling process."""
@@ -147,31 +162,41 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         if not links:
             return {"alive": 0, "dead": 0, "total": 0, "total_time_ms": int((time.time() - crawl_start_time) * 1000)}
             
-        semaphore = asyncio.Semaphore(safe_concurrency)
-        tasks = []
+        queue = asyncio.Queue()
+        for link in links:
+            queue.put_nowait(link)
+            
+        results_list = []
+        workers = []
         
-        for index, link in enumerate(links):
-            task = asyncio.create_task(check_single_link(
-                target_url=link, 
+        # Spawn N worker tasks
+        for _ in range(safe_concurrency):
+            worker = asyncio.create_task(crawler_worker(
+                queue=queue, 
                 source_url=start_url, 
                 session=session, 
-                semaphore=semaphore, 
                 on_progress=on_progress, 
-                user_id=user_id,
-                initial_delay=delay * index
+                user_id=user_id, 
+                delay=delay, 
+                results_list=results_list
             ))
-            tasks.append(task)
+            workers.append(worker)
+            
+        # Block until the queue is completely processed
+        await queue.join()
         
-        results = await asyncio.gather(*tasks)
+        # Cancel all worker tasks since they are infinite loops
+        for worker in workers:
+            worker.cancel()
         
-        alive_count = sum(results)
-        dead_count = len(results) - alive_count
+        alive_count = sum(results_list)
+        dead_count = len(results_list) - alive_count
         
         crawl_end_time = time.time()
         
         return {
             "alive": alive_count,
             "dead": dead_count,
-            "total": len(results),
+            "total": len(results_list),
             "total_time_ms": int((crawl_end_time - crawl_start_time) * 1000)
         }
