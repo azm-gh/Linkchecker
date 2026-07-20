@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 import time
+import inspect
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
@@ -12,6 +13,18 @@ DEFAULT_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
 )
+
+def is_valid_url(url):
+    parsed = urlparse(url)
+    return parsed.scheme in ('http', 'https') and not security.is_domain_blocked(url)
+
+async def fire_callback(callback, data):
+    if not callback:
+        return
+    if inspect.iscoroutinefunction(callback):
+        await callback(data)
+    else:
+        callback(data)
 
 async def fetch_html(url, session):
     """Fetches the HTML content of the starting URL."""
@@ -27,11 +40,10 @@ def extract_links(html_content, base_url):
     soup = BeautifulSoup(html_content, 'html.parser')
     links = set()
     for a_tag in soup.find_all('a', href=True):
-        href = a_tag['href']
-        full_url = urljoin(base_url, href)
-        parsed_url = urlparse(full_url)
-        if parsed_url.scheme in ('http', 'https'):
-            if not security.is_domain_blocked(full_url):
+        href = a_tag.get('href')
+        if href:
+            full_url = urljoin(base_url, href)
+            if is_valid_url(full_url):
                 links.add(full_url)
     return list(links)
 
@@ -41,34 +53,30 @@ def extract_sitemap_links(xml_content):
     links = set()
     for loc in soup.find_all('loc'):
         url = loc.text.strip()
-        parsed_url = urlparse(url)
-        if parsed_url.scheme in ('http', 'https'):
-            if not security.is_domain_blocked(url):
-                links.add(url)
+        if is_valid_url(url):
+            links.add(url)
     return list(links)
 
-async def check_single_link(target_url, source_url, session, semaphore, timeout=10, on_progress=None):
+async def check_single_link(target_url, source_url, session, semaphore, timeout=10, on_progress=None, user_id=None, initial_delay=0.0):
     """Checks a single link, saves to DB, and triggers progress callback."""
+    if initial_delay > 0:
+        await asyncio.sleep(initial_delay)
+        
     status_code = None
     error_message = None
     is_alive = False
     
     async with semaphore:
         start_time = time.time()
+        client_timeout = aiohttp.ClientTimeout(total=timeout)
         try:
-            async def _do_head():
-                async with session.head(target_url, allow_redirects=True) as response:
-                    return response.status
-
-            async def _do_get():
-                async with session.get(target_url, allow_redirects=True) as response:
-                    return response.status
-
-            status_code = await asyncio.wait_for(_do_head(), timeout=timeout)
-            
+            async with session.head(target_url, allow_redirects=True, timeout=client_timeout) as response:
+                status_code = response.status
+                
             if status_code == 405:
-                status_code = await asyncio.wait_for(_do_get(), timeout=timeout)
-            
+                async with session.get(target_url, allow_redirects=True, timeout=client_timeout) as response:
+                    status_code = response.status
+                    
             if 200 <= status_code < 400:
                 is_alive = True
                 
@@ -87,7 +95,8 @@ async def check_single_link(target_url, source_url, session, semaphore, timeout=
                 status_code=status_code,
                 error_message=error_message,
                 is_alive=is_alive,
-                response_time_ms=response_time_ms
+                response_time_ms=response_time_ms,
+                user_id=user_id
             )
             
             result = {
@@ -98,15 +107,11 @@ async def check_single_link(target_url, source_url, session, semaphore, timeout=
                 "response_time_ms": response_time_ms
             }
             
-            if on_progress:
-                if asyncio.iscoroutinefunction(on_progress):
-                    await on_progress(result)
-                else:
-                    on_progress(result)
+            await fire_callback(on_progress, result)
             
             return is_alive
 
-async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_init=None):
+async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_init=None, user_id=None):
     """Core engine that coordinates the crawling process."""
     db.init_db()
     headers = {"User-Agent": DEFAULT_USER_AGENT}
@@ -120,11 +125,7 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         try:
             content = await fetch_html(start_url, session)
         except Exception as e:
-            if on_init:
-                if asyncio.iscoroutinefunction(on_init):
-                    await on_init({"error": str(e)})
-                else:
-                    on_init({"error": str(e)})
+            await fire_callback(on_init, {"error": str(e)})
             return {"error": str(e)}
             
         is_xml = start_url.lower().endswith('.xml') or content.strip().startswith('<?xml') or '<urlset' in content
@@ -141,10 +142,7 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
                 "total_links": len(links), 
                 "message": f"Found {len(links)} URLs in {source_type} (Security Concurrency Cap: {safe_concurrency})"
             }
-            if asyncio.iscoroutinefunction(on_init):
-                await on_init(init_data)
-            else:
-                on_init(init_data)
+            await fire_callback(on_init, init_data)
                 
         if not links:
             return {"alive": 0, "dead": 0, "total": 0, "total_time_ms": int((time.time() - crawl_start_time) * 1000)}
@@ -152,10 +150,16 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         semaphore = asyncio.Semaphore(safe_concurrency)
         tasks = []
         
-        for link in links:
-            if delay > 0:
-                await asyncio.sleep(delay)
-            task = asyncio.create_task(check_single_link(link, start_url, session, semaphore, on_progress=on_progress))
+        for index, link in enumerate(links):
+            task = asyncio.create_task(check_single_link(
+                target_url=link, 
+                source_url=start_url, 
+                session=session, 
+                semaphore=semaphore, 
+                on_progress=on_progress, 
+                user_id=user_id,
+                initial_delay=delay * index
+            ))
             tasks.append(task)
         
         results = await asyncio.gather(*tasks)

@@ -4,6 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
 import crawler
+import firebase_admin
+from firebase_admin import auth
+
+# Initialize Firebase Admin for token verification
+firebase_admin.initialize_app(options={'projectId': 'link-checker-1784544272'})
 
 app = FastAPI(title="Asyncio Link Checker")
 
@@ -26,9 +31,21 @@ async def websocket_endpoint(websocket: WebSocket):
         start_url = config.get("url")
         concurrency = int(config.get("concurrency", 50))
         delay = float(config.get("delay", 0.0))
+        token = config.get("token")
         
         if not start_url:
             await websocket.send_json({"type": "error", "message": "URL is required"})
+            return
+            
+        if not token:
+            await websocket.send_json({"type": "error", "message": "Authentication required. Please log in."})
+            return
+            
+        try:
+            decoded_token = auth.verify_id_token(token)
+            user_id = decoded_token['uid']
+        except Exception as e:
+            await websocket.send_json({"type": "error", "message": f"Authentication failed: {e}"})
             return
 
         # Define callbacks to send data over WebSocket
@@ -47,7 +64,8 @@ async def websocket_endpoint(websocket: WebSocket):
             concurrency=concurrency,
             delay=delay,
             on_progress=ws_on_progress,
-            on_init=ws_on_init
+            on_init=ws_on_init,
+            user_id=user_id
         )
         
         if "error" not in summary:
@@ -60,5 +78,5 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         try:
             await websocket.close()
-        except:
+        except Exception:
             pass
