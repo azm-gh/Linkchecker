@@ -57,8 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             if (!user.emailVerified) {
-                authError.style.color = "var(--error)";
-                authError.textContent = "Please verify your email address to access the dashboard.";
+                // If they managed to bypass the login screen (e.g. cached JS), kick them out
+                authContainer.classList.remove('hidden');
+                appDashboard.classList.add('hidden');
                 signOut(auth);
                 return;
             }
@@ -77,8 +78,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loginBtn.addEventListener('click', () => {
+        authError.style.color = "var(--error)";
         authError.textContent = '';
         signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value)
+            .then((userCredential) => {
+                if (!userCredential.user.emailVerified) {
+                    sendEmailVerification(userCredential.user);
+                    authError.style.color = "var(--error)";
+                    authError.textContent = "You haven't verified your email! We just sent a new verification link to your inbox.";
+                    signOut(auth);
+                }
+            })
             .catch((error) => { authError.textContent = error.message; });
     });
 
