@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
   projectId: "link-checker-1784544272",
@@ -56,7 +56,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // User is logged in
+            if (!user.emailVerified) {
+                authError.style.color = "var(--error)";
+                authError.textContent = "Please verify your email address to access the dashboard.";
+                signOut(auth);
+                return;
+            }
+            // User is logged in and verified
             authContainer.classList.add('hidden');
             appDashboard.classList.remove('hidden');
             userEmailDisplay.textContent = user.email;
@@ -77,8 +83,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     registerBtn.addEventListener('click', () => {
+        authError.style.color = "var(--error)";
         authError.textContent = '';
         createUserWithEmailAndPassword(auth, emailInput.value, passwordInput.value)
+            .then((userCredential) => {
+                sendEmailVerification(userCredential.user);
+                authError.style.color = "var(--success)";
+                authError.textContent = "Registration successful! We have sent a verification link to your email.";
+            })
             .catch((error) => { authError.textContent = error.message; });
     });
 

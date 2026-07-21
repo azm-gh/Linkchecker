@@ -5,10 +5,15 @@ from fastapi.templating import Jinja2Templates
 import json
 import crawler
 import firebase_admin
-from firebase_admin import auth
+from firebase_admin import auth, credentials
+import os
+
+# Set credentials for the Google Cloud async SDKs
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "serviceAccountKey.json"
 
 # Initialize Firebase Admin for token verification
-firebase_admin.initialize_app(options={'projectId': 'link-checker-1784544272'})
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred, options={'projectId': 'link-checker-1784544272'})
 
 app = FastAPI(title="Asyncio Link Checker")
 
@@ -43,6 +48,9 @@ async def websocket_endpoint(websocket: WebSocket):
             
         try:
             decoded_token = auth.verify_id_token(token)
+            if not decoded_token.get('email_verified', False):
+                await websocket.send_json({"type": "error", "message": "Email not verified. Please verify your email."})
+                return
             user_id = decoded_token['uid']
         except Exception as e:
             await websocket.send_json({"type": "error", "message": f"Authentication failed: {e}"})

@@ -85,7 +85,7 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
         response_time_ms = int((end_time - start_time) * 1000)
         
         # Persist to database
-        db.save_link_check(
+        await db.save_link_check(
             target_url=target_url,
             source_url=source_url,
             status_code=status_code,
@@ -128,7 +128,6 @@ async def crawler_worker(queue, source_url, session, on_progress, user_id, delay
 
 async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_init=None, user_id=None):
     """Core engine that coordinates the crawling process."""
-    db.init_db()
     headers = {"User-Agent": DEFAULT_USER_AGENT}
     
     crawl_start_time = time.time()
