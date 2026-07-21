@@ -1,4 +1,4 @@
-aiohttp==3.9.5
+aiohttp==3.11.11
 beautifulsoup4==4.12.3
 colorama==0.4.6
 fastapi==0.111.0
@@ -6,3 +6,5 @@ uvicorn==0.30.1
 jinja2==3.1.4
 websockets
 lxml
+firebase-admin
+google-cloud-firestore

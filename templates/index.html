@@ -19,7 +19,22 @@
             <p>High-performance, concurrent web crawler powered by Python.</p>
         </header>
 
-        <main>
+        <div id="auth-container" class="glass-card controls-card" style="text-align: center; margin-bottom: 20px;">
+            <h2 style="margin-bottom: 15px;">Login or Register</h2>
+            <input type="email" id="email" placeholder="Email" required style="display:block; width:100%; margin-bottom: 10px; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+            <input type="password" id="password" placeholder="Password" required style="display:block; width:100%; margin-bottom: 20px; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="login-btn" style="padding: 10px 20px;">Login</button>
+                <button id="register-btn" style="padding: 10px 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">Register</button>
+            </div>
+            <p id="auth-error" style="color: var(--error); margin-top: 15px;"></p>
+        </div>
+
+        <main id="app-dashboard" class="hidden">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <p>Logged in as: <strong id="user-email"></strong></p>
+                <button id="logout-btn" style="padding: 8px 15px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white; cursor: pointer;">Logout</button>
+            </div>
             <div class="glass-card controls-card">
                 <form id="scan-form">
                     <div class="input-group">
@@ -88,6 +103,6 @@
         </main>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>

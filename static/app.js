@@ -1,4 +1,33 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+const firebaseConfig = {
+  projectId: "link-checker-1784544272",
+  appId: "1:833231168125:web:e0979db7312f214ba60714",
+  storageBucket: "link-checker-1784544272.firebasestorage.app",
+  apiKey: "AIzaSyDfMQDz_YM5zT6goo-8sZlKvx4y1hBYZTg",
+  authDomain: "link-checker-1784544272.firebaseapp.com",
+  messagingSenderId: "833231168125"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+let currentToken = null;
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Auth UI Elements
+    const authContainer = document.getElementById('auth-container');
+    const appDashboard = document.getElementById('app-dashboard');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+    const registerBtn = document.getElementById('register-btn');
+    const authError = document.getElementById('auth-error');
+    const userEmailDisplay = document.getElementById('user-email');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    // App UI Elements
     const form = document.getElementById('scan-form');
     const urlInput = document.getElementById('url');
     const concurrencyInput = document.getElementById('concurrency');
@@ -23,15 +52,55 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentAlive = 0;
     let currentDead = 0;
 
-    // Update slider values dynamically
+    // --- Firebase Auth Logic ---
+
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // User is logged in
+            authContainer.classList.add('hidden');
+            appDashboard.classList.remove('hidden');
+            userEmailDisplay.textContent = user.email;
+            currentToken = await user.getIdToken();
+        } else {
+            // User is logged out
+            authContainer.classList.remove('hidden');
+            appDashboard.classList.add('hidden');
+            userEmailDisplay.textContent = '';
+            currentToken = null;
+        }
+    });
+
+    loginBtn.addEventListener('click', () => {
+        authError.textContent = '';
+        signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value)
+            .catch((error) => { authError.textContent = error.message; });
+    });
+
+    registerBtn.addEventListener('click', () => {
+        authError.textContent = '';
+        createUserWithEmailAndPassword(auth, emailInput.value, passwordInput.value)
+            .catch((error) => { authError.textContent = error.message; });
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        signOut(auth).catch((error) => console.error(error));
+    });
+
+    // --- Crawler Logic ---
+
     concurrencyInput.addEventListener('input', (e) => concurrencyVal.textContent = e.target.value);
     delayInput.addEventListener('input', (e) => delayVal.textContent = e.target.value);
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const url = urlInput.value.trim();
         if (!url) return;
+
+        // Force a token refresh just in case it expired while sitting on the page
+        if (auth.currentUser) {
+            currentToken = await auth.currentUser.getIdToken(true);
+        }
 
         // Reset UI
         resultsBody.innerHTML = '';
@@ -59,11 +128,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ws.onopen = () => {
             statusMessage.textContent = 'Starting scan...';
-            // Send config
+            // Send config AND Token
             ws.send(JSON.stringify({
                 url: url,
                 concurrency: concurrencyInput.value,
-                delay: delayInput.value
+                delay: delayInput.value,
+                token: currentToken
             }));
         };
 
