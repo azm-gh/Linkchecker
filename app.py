@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
 import crawler
+import db
+import security
 import firebase_admin
 from firebase_admin import auth, credentials
 import os
@@ -57,6 +59,16 @@ async def websocket_endpoint(websocket: WebSocket):
             user_id = decoded_token['uid']
         except Exception as e:
             await websocket.send_json({"type": "error", "message": f"Authentication failed: {e}"})
+            return
+
+        # Enforce Daily Quota before starting scan
+        try:
+            under_limit = await db.check_daily_limit(user_id, security.DAILY_SCAN_LIMIT)
+            if not under_limit:
+                await websocket.send_json({"type": "error", "message": f"Daily quota exceeded! You are limited to {security.DAILY_SCAN_LIMIT} scans per 24 hours."})
+                return
+        except Exception as e:
+            await websocket.send_json({"type": "error", "message": f"Failed to verify quota: {e}"})
             return
 
         # Define callbacks to send data over WebSocket

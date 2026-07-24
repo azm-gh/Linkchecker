@@ -84,17 +84,6 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
         end_time = time.time()
         response_time_ms = int((end_time - start_time) * 1000)
         
-        # Persist to database
-        await db.save_link_check(
-            target_url=target_url,
-            source_url=source_url,
-            status_code=status_code,
-            error_message=error_message,
-            is_alive=is_alive,
-            response_time_ms=response_time_ms,
-            user_id=user_id
-        )
-        
         result = {
             "target_url": target_url,
             "status_code": status_code,
@@ -112,14 +101,14 @@ async def crawler_worker(queue, source_url, session, on_progress, user_id, delay
     while True:
         target_url = await queue.get()
         try:
-            is_alive = await check_single_link(
+            result = await check_single_link(
                 target_url=target_url, 
                 source_url=source_url, 
                 session=session, 
                 on_progress=on_progress, 
                 user_id=user_id
             )
-            results_list.append(is_alive)
+            results_list.append(result)
             
             if delay > 0:
                 await asyncio.sleep(delay)
@@ -150,11 +139,15 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         else:
             links = extract_links(content, start_url)
             source_type = "HTML Page"
+            
+        # Hard limit to prevent abuse
+        original_link_count = len(links)
+        links = links[:security.MAX_URLS]
         
         if on_init:
             init_data = {
                 "total_links": len(links), 
-                "message": f"Found {len(links)} URLs in {source_type} (Security Concurrency Cap: {safe_concurrency})"
+                "message": f"Found {original_link_count} URLs (Capped at {security.MAX_URLS}). Security Concurrency: {safe_concurrency}"
             }
             await fire_callback(on_init, init_data)
                 
@@ -181,21 +174,33 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
             ))
             workers.append(worker)
             
-        # Block until the queue is completely processed
-        await queue.join()
+        # Block until the queue is completely processed, with a strict timeout
+        try:
+            await asyncio.wait_for(queue.join(), timeout=security.MAX_TIMEOUT)
+        except asyncio.TimeoutError:
+            pass # Timeout reached, we will process whatever results we have so far
         
         # Cancel all worker tasks since they are infinite loops
         for worker in workers:
             worker.cancel()
         
-        alive_count = sum(results_list)
+        alive_count = sum(1 for r in results_list if r['is_alive'])
         dead_count = len(results_list) - alive_count
         
         crawl_end_time = time.time()
+        total_time_ms = int((crawl_end_time - crawl_start_time) * 1000)
+        
+        # Save a single summary to the database
+        await db.save_scan_summary(
+            source_url=start_url,
+            user_id=user_id,
+            total_time_ms=total_time_ms,
+            results=results_list
+        )
         
         return {
             "alive": alive_count,
             "dead": dead_count,
             "total": len(results_list),
-            "total_time_ms": int((crawl_end_time - crawl_start_time) * 1000)
+            "total_time_ms": total_time_ms
         }

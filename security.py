@@ -6,7 +6,14 @@ ABUSE_PREVENTION_ENABLED = True
 # The absolute maximum concurrency allowed, preventing SSRF attacks.
 MAX_CONCURRENCY = 50
 
-# Domains known to block bots aggressively or massive domains we shouldn't scan.
+# Hard engine limits to prevent CPU exhaustion and billing surprises
+MAX_URLS = 400
+MAX_TIMEOUT = 60
+
+# Daily Quota to protect database write limits
+DAILY_SCAN_LIMIT = 10
+
+# Domains known to block bots aggressively, massive domains we shouldn't scan, and private IP blocks (SSRF)
 BLOCKLIST = {
     'linkedin.com',
     'facebook.com',
@@ -14,7 +21,12 @@ BLOCKLIST = {
     'x.com',
     'instagram.com',
     'amazon.com',
-    'apple.com'
+    'apple.com',
+    # SSRF Protection
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '169.254.169.254'
 }
 
 def get_safe_concurrency(requested_concurrency: int) -> int:
