@@ -94,7 +94,7 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
         
         await fire_callback(on_progress, result)
         
-        return is_alive
+        return result
 
 async def crawler_worker(queue, source_url, session, on_progress, user_id, delay, results_list):
     """Worker task that constantly pulls URLs from the queue."""

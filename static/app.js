@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
   projectId: "link-checker-1784544272",
@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const passwordInput = document.getElementById('password');
     const loginBtn = document.getElementById('login-btn');
     const registerBtn = document.getElementById('register-btn');
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
     const authError = document.getElementById('auth-error');
     const userEmailDisplay = document.getElementById('user-email');
     const logoutBtn = document.getElementById('logout-btn');
@@ -102,6 +103,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 authError.textContent = "Registration successful! We have sent a verification link to your email.";
             })
             .catch((error) => { authError.textContent = error.message; });
+    });
+
+    forgotPasswordLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        const email = emailInput.value.trim();
+        if (!email) {
+            authError.style.color = "var(--error)";
+            authError.textContent = "Please enter your email address in the field above to reset your password.";
+            return;
+        }
+        sendPasswordResetEmail(auth, email)
+            .then(() => {
+                authError.style.color = "var(--success)";
+                authError.textContent = "Password reset email sent! Check your inbox.";
+            })
+            .catch((error) => { 
+                authError.style.color = "var(--error)";
+                authError.textContent = error.message; 
+            });
     });
 
     logoutBtn.addEventListener('click', () => {
