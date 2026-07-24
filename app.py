@@ -8,12 +8,15 @@ import firebase_admin
 from firebase_admin import auth, credentials
 import os
 
-# Set credentials for the Google Cloud async SDKs
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "serviceAccountKey.json"
-
-# Initialize Firebase Admin for token verification
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred, options={'projectId': 'link-checker-1784544272'})
+# Initialize Firebase Admin
+if os.path.exists("serviceAccountKey.json"):
+    # Local Development: use local JSON key
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "serviceAccountKey.json"
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred, options={'projectId': 'link-checker-1784544272'})
+else:
+    # Production Cloud Run: use Application Default Credentials natively
+    firebase_admin.initialize_app(options={'projectId': 'link-checker-1784544272'})
 
 app = FastAPI(title="Asyncio Link Checker")
 
