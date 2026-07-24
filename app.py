@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
@@ -20,15 +21,19 @@ else:
     # Production Cloud Run: use Application Default Credentials natively
     firebase_admin.initialize_app(options={'projectId': 'link-checker-1784544272'})
 
-app = FastAPI(title="Asyncio Link Checker")
+app = FastAPI(title="Link Checker")
 
-# Mount static files and templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# Allow React dev server to communicate with FastAPI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Vite dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/", response_class=HTMLResponse)
-async def read_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# In production, serve the built React files
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
 @app.get("/api/history")
 async def get_history_api(authorization: str = Header(None)):
@@ -46,9 +51,13 @@ async def get_history_api(authorization: str = Header(None)):
     history = await db.get_history(user_id)
     return {"history": history}
 
+# Keep a track of active scans to prevent multiple concurrent runs per user
+active_scans = {}
+
 @app.websocket("/ws/scan")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    user_id = None
     try:
         # Wait for the configuration from the client
         data = await websocket.receive_text()
@@ -119,3 +128,15 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+
+# Catch-all route to serve the React app
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    if os.path.exists(os.path.join(FRONTEND_DIST, full_path)) and full_path != "":
+        return FileResponse(os.path.join(FRONTEND_DIST, full_path))
+    
+    index_path = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    
+    return HTMLResponse("<h1>React Build Not Found</h1><p>Run 'npm run build' in the frontend directory.</p>", status_code=404)
