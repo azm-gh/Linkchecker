@@ -52,13 +52,12 @@ function App() {
         <Auth />
       ) : (
         <Layout user={user} currentView={currentView} setCurrentView={setCurrentView}>
-          <AnimatePresence mode="wait">
-            {currentView === 'scanner' ? (
-              <Scanner key="scanner" token={token} />
-            ) : (
-              <History key="history" token={token} />
-            )}
-          </AnimatePresence>
+          <div style={{ display: currentView === 'scanner' ? 'block' : 'none' }}>
+            <Scanner token={token} />
+          </div>
+          <div style={{ display: currentView === 'history' ? 'block' : 'none' }}>
+            <History token={token} />
+          </div>
         </Layout>
       )}
     </>
