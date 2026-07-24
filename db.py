@@ -45,3 +45,23 @@ async def save_scan_summary(source_url: str, user_id: str, total_time_ms: int, r
         'broken_links': broken_links,
         'timestamp': firebase_firestore.SERVER_TIMESTAMP
     })
+
+async def get_history(user_id: str, limit: int = 20) -> list:
+    """Fetches the scan history for a user."""
+    if not user_id:
+        return []
+    
+    db = get_db()
+    query = db.collection('scans').where("user_id", "==", user_id)
+    
+    results = []
+    async for doc in query.stream():
+        data = doc.to_dict()
+        # Convert timestamp to ISO format for JSON serialization
+        if 'timestamp' in data and data['timestamp']:
+            data['timestamp'] = data['timestamp'].isoformat()
+        results.append(data)
+        
+    # Sort in memory to avoid needing a custom composite Firestore index
+    results.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    return results[:limit]

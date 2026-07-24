@@ -29,6 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const authError = document.getElementById('auth-error');
     const userEmailDisplay = document.getElementById('user-email');
     const logoutBtn = document.getElementById('logout-btn');
+    
+    // Nav elements
+    const navScannerBtn = document.getElementById('nav-scanner-btn');
+    const navHistoryBtn = document.getElementById('nav-history-btn');
+    const scannerView = document.getElementById('scanner-view');
+    const historyView = document.getElementById('history-view');
 
     // App UI Elements
     const form = document.getElementById('scan-form');
@@ -51,9 +57,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const statAlive = document.getElementById('stat-alive');
     const statDead = document.getElementById('stat-dead');
     const statTime = document.getElementById('stat-time');
+    
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    const historyBody = document.getElementById('history-body');
 
     let currentAlive = 0;
     let currentDead = 0;
+    let currentScanResults = [];
 
     // --- Firebase Auth Logic ---
 
@@ -130,6 +140,80 @@ document.addEventListener('DOMContentLoaded', () => {
         signOut(auth).catch((error) => console.error(error));
     });
 
+    // --- Navigation Logic ---
+    navScannerBtn.addEventListener('click', () => {
+        scannerView.classList.remove('hidden');
+        historyView.classList.add('hidden');
+        navScannerBtn.style.background = 'var(--accent-primary)';
+        navScannerBtn.style.border = 'none';
+        navHistoryBtn.style.background = 'rgba(255,255,255,0.1)';
+        navHistoryBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+    });
+
+    navHistoryBtn.addEventListener('click', () => {
+        scannerView.classList.add('hidden');
+        historyView.classList.remove('hidden');
+        navHistoryBtn.style.background = 'var(--accent-primary)';
+        navHistoryBtn.style.border = 'none';
+        navScannerBtn.style.background = 'rgba(255,255,255,0.1)';
+        navScannerBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+        loadHistory();
+    });
+
+    async function loadHistory() {
+        if (!currentToken) return;
+        historyBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading history...</td></tr>';
+        try {
+            const res = await fetch('/api/history', {
+                headers: { 'Authorization': 'Bearer ' + currentToken }
+            });
+            if (!res.ok) throw new Error('Failed to fetch history');
+            const data = await res.json();
+            historyBody.innerHTML = '';
+            if (!data.history || data.history.length === 0) {
+                historyBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No history found.</td></tr>';
+                return;
+            }
+            data.history.forEach(scan => {
+                const tr = document.createElement('tr');
+                const date = new Date(scan.timestamp).toLocaleString();
+                tr.innerHTML = `
+                    <td>${date}</td>
+                    <td><a href="${scan.source_url}" target="_blank" style="color:var(--accent-primary);">${scan.source_url}</a></td>
+                    <td>${scan.total_scanned}</td>
+                    <td style="color:var(--error); font-weight:bold;">${scan.dead_count}</td>
+                    <td>${scan.total_time_ms}ms</td>
+                `;
+                historyBody.appendChild(tr);
+            });
+        } catch (e) {
+            historyBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--error);">${e.message}</td></tr>`;
+        }
+    }
+
+    // --- CSV Export Logic ---
+    exportCsvBtn.addEventListener('click', () => {
+        if (currentScanResults.length === 0) return;
+        
+        let csvContent = "Target URL,Status,Response Time (ms),Error\n";
+        currentScanResults.forEach(r => {
+            // Escape quotes and wrap in quotes for safety
+            const url = `"${r.target_url.replace(/"/g, '""')}"`;
+            const status = r.status_code || '';
+            const error = r.error_message ? `"${r.error_message.replace(/"/g, '""')}"` : '';
+            csvContent += `${url},${status},${r.response_time_ms},${error}\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "scan_results.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
     // --- Crawler Logic ---
 
     concurrencyInput.addEventListener('input', (e) => concurrencyVal.textContent = e.target.value);
@@ -150,10 +234,12 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsBody.innerHTML = '';
         currentAlive = 0;
         currentDead = 0;
+        currentScanResults = [];
         statTotal.textContent = '0';
         statAlive.textContent = '0';
         statDead.textContent = '0';
         statTime.textContent = '-';
+        exportCsvBtn.classList.add('hidden');
         
         summaryCard.classList.remove('hidden');
         resultsContainer.classList.remove('hidden');
@@ -190,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } 
             else if (response.type === 'progress') {
                 const res = response.data;
+                currentScanResults.push(res);
                 appendResultRow(res);
                 
                 if (res.is_alive) {
@@ -204,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusMessage.textContent = 'Scan Complete!';
                 statusMessage.style.color = 'var(--success)';
                 statTime.textContent = response.data.total_time_ms + 'ms';
+                exportCsvBtn.classList.remove('hidden');
                 resetButton();
             }
             else if (response.type === 'error') {

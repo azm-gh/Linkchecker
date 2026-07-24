@@ -34,9 +34,15 @@
         <main id="app-dashboard" class="hidden">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <p>Logged in as: <strong id="user-email"></strong></p>
-                <button id="logout-btn" style="padding: 8px 15px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white; cursor: pointer;">Logout</button>
+                <div>
+                    <button id="nav-scanner-btn" style="padding: 8px 15px; font-size: 0.8rem; border-radius: 5px; cursor: pointer; margin-right: 5px; border: none; background: var(--accent-primary); color: white;">Scanner</button>
+                    <button id="nav-history-btn" style="padding: 8px 15px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white; cursor: pointer; margin-right: 5px;">History</button>
+                    <button id="logout-btn" style="padding: 8px 15px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: white; cursor: pointer;">Logout</button>
+                </div>
             </div>
-            <div class="glass-card controls-card">
+            
+            <div id="scanner-view">
+                <div class="glass-card controls-card">
                 <form id="scan-form">
                     <div class="input-group">
                         <label for="url">Target URL</label>
@@ -86,6 +92,10 @@
                 </div>
             </div>
 
+            <div style="text-align: right; margin-bottom: 10px;">
+                <button id="export-csv-btn" class="hidden" style="padding: 8px 15px; background: var(--accent-secondary); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Download CSV</button>
+            </div>
+
             <div class="table-container hidden" id="results-container">
                 <table id="results-table">
                     <thead>
@@ -101,9 +111,33 @@
                     </tbody>
                 </table>
             </div>
+            </div>
+
+            <div id="history-view" class="hidden">
+                <div class="glass-card controls-card">
+                    <h2>Scan History</h2>
+                    <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-bottom: 15px;">Your most recent scans are shown below.</p>
+                    <div class="table-container">
+                        <table id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Target URL</th>
+                                    <th>Total Scanned</th>
+                                    <th>Broken Links</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-body">
+                                <tr><td colspan="5" style="text-align:center;">Loading history...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
-    <script type="module" src="/static/app.js?v=2"></script>
+    <script type="module" src="/static/app.js?v=3"></script>
 </body>
 </html>

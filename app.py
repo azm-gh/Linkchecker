@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -29,6 +29,22 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/", response_class=HTMLResponse)
 async def read_index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/api/history")
+async def get_history_api(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    token = authorization.split("Bearer ")[1]
+    
+    try:
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        
+    history = await db.get_history(user_id)
+    return {"history": history}
 
 @app.websocket("/ws/scan")
 async def websocket_endpoint(websocket: WebSocket):
