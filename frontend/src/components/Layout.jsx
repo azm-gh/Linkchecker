@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { LogOut, Activity, History } from 'lucide-react';
+import { LogOut, Activity, History, Clock } from 'lucide-react';
 
 export default function Layout({ user, children, currentView, setCurrentView }) {
   
@@ -53,6 +53,17 @@ export default function Layout({ user, children, currentView, setCurrentView }) 
               }}
             >
               <History size={16} /> History
+            </button>
+            <button 
+              onClick={() => setCurrentView('schedules')}
+              style={{ 
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: currentView === 'schedules' ? 'var(--accent-primary)' : 'transparent',
+                color: currentView === 'schedules' ? 'white' : 'var(--text-secondary)',
+                border: currentView === 'schedules' ? 'none' : '1px solid transparent',
+              }}
+            >
+              <Clock size={16} /> Schedules
             </button>
           </div>
         </div>

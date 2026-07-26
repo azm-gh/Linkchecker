@@ -8,6 +8,7 @@ import Auth from './components/Auth';
 import Layout from './components/Layout';
 import Scanner from './components/Scanner';
 import History from './components/History';
+import Schedules from './components/Schedules';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -57,6 +58,9 @@ function App() {
           </div>
           <div style={{ display: currentView === 'history' ? 'block' : 'none' }}>
             <History token={token} />
+          </div>
+          <div style={{ display: currentView === 'schedules' ? 'block' : 'none' }}>
+            <Schedules token={token} />
           </div>
         </Layout>
       )}

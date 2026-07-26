@@ -35,21 +35,77 @@ app.add_middleware(
 # In production, serve the built React files
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
-@app.get("/api/history")
-async def get_history_api(authorization: str = Header(None)):
+async def get_user_from_token(authorization: str):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
-        
     token = authorization.split("Bearer ")[1]
-    
     try:
         decoded_token = auth.verify_id_token(token)
-        user_id = decoded_token['uid']
+        return decoded_token['uid'], decoded_token.get('email', '')
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
-        
+
+@app.get("/api/history")
+async def get_history_api(authorization: str = Header(None)):
+    user_id, _ = await get_user_from_token(authorization)
     history = await db.get_history(user_id)
     return {"history": history}
+
+@app.get("/api/schedules")
+async def get_schedules_api(authorization: str = Header(None)):
+    user_id, _ = await get_user_from_token(authorization)
+    schedules = await db.get_schedules(user_id)
+    return {"schedules": schedules}
+
+@app.post("/api/schedules")
+async def create_schedule_api(request: Request, authorization: str = Header(None)):
+    user_id, email = await get_user_from_token(authorization)
+    data = await request.json()
+    url = data.get("url")
+    frequency = data.get("frequency")
+    if not url or not frequency:
+        raise HTTPException(status_code=400, detail="URL and frequency required")
+    await db.add_schedule(user_id, url, frequency, email)
+    return {"status": "success"}
+
+@app.delete("/api/schedules/{schedule_id}")
+async def delete_schedule_api(schedule_id: str, authorization: str = Header(None)):
+    user_id, _ = await get_user_from_token(authorization)
+    await db.delete_schedule(schedule_id, user_id)
+    return {"status": "success"}
+    
+CRON_SECRET = "super-secret-cron-token-123"
+
+@app.post("/api/cron/run-schedules")
+async def run_schedules_cron(authorization: str = Header(None)):
+    if authorization != f"Bearer {CRON_SECRET}":
+        raise HTTPException(status_code=401, detail="Unauthorized Cron")
+        
+    due_schedules = await db.get_due_schedules()
+    results_summary = []
+    
+    for sched in due_schedules:
+        # Run crawler headlessly
+        summary = await crawler.run_crawl(
+            start_url=sched['url'],
+            concurrency=20,  # Lower concurrency for background tasks
+            delay=0.1,
+            user_id=sched['user_id']
+        )
+        
+        # Update last run
+        await db.update_schedule_last_run(sched['id'], sched['frequency'])
+        
+        # MOCK EMAIL
+        print(f"==================================================")
+        print(f"MOCK EMAIL SENT TO: {sched['email']}")
+        print(f"SUBJECT: Link Checker Report for {sched['url']}")
+        print(f"BODY: We finished auditing your site. Found {summary.get('dead', 0)} dead links.")
+        print(f"==================================================")
+        
+        results_summary.append({"url": sched['url'], "status": "completed"})
+        
+    return {"status": "success", "ran": len(due_schedules), "details": results_summary}
 
 # Keep a track of active scans to prevent multiple concurrent runs per user
 active_scans = {}
