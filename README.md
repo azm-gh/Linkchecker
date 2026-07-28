@@ -13,6 +13,7 @@ It extracts links from standard webpages or massive XML Sitemaps, concurrently v
 *   **CSV Export:** Instantly download any completed scan as a fully formatted CSV file.
 *   **Scheduled Scans (Cron):** Users can set up automated Daily, Weekly, or Monthly background audits. The backend features a secure webhook designed to be triggered by Google Cloud Scheduler, executing headless crawls and mocking email delivery.
 *   **XML Sitemap Auditing:** Feed it a `.xml` file, and it automatically parses the `<loc>` tags to audit an entire website in one click.
+*   **Enterprise-Grade Crawler Engine:** Hardened core engine featuring strict TCP socket connection pooling, automatic URL deduplication (fragment stripping), and robust HTTP fallback strategies (HEAD to GET on 405/403) to bypass WAFs and CDNs.
 *   **Lightning Fast Concurrency:** Uses Python's `asyncio` to check dozens of links simultaneously instead of waiting for each server sequentially.
 
 ## 🛠 Installation
