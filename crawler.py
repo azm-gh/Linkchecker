@@ -45,8 +45,8 @@ def extract_links(html_content, base_url):
         href = a_tag.get('href')
         if href:
             full_url = urljoin(base_url, href)
-            # Strip fragments for deduplication
-            full_url = full_url.split('#')[0]
+            # Strip fragments and trailing slashes for deduplication
+            full_url = full_url.split('#')[0].rstrip('/')
             if is_valid_url(full_url):
                 links.add(full_url)
     return list(links)
@@ -61,6 +61,17 @@ def extract_sitemap_links(xml_content):
             links.add(url)
     return list(links)
 
+async def _request_with_retries(session, method, url, timeout, retries=2):
+    backoff = 0.5
+    for i in range(retries + 1):
+        try:
+            async with session.request(method, url, allow_redirects=False, timeout=timeout) as resp:
+                return resp.status, resp.headers.get('Location')
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            if i == retries:
+                raise
+            await asyncio.sleep(backoff * (2 ** i))
+
 async def check_single_link(target_url, source_url, session, timeout=10, on_progress=None, user_id=None):
     """Checks a single link, saves to DB, and triggers progress callback."""
     status_code = None
@@ -69,13 +80,26 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
     
     start_time = time.time()
     client_timeout = aiohttp.ClientTimeout(total=timeout)
+    current_url = target_url
+    redirects = 0
+    
     try:
-        async with session.head(target_url, allow_redirects=True, timeout=client_timeout) as response:
-            status_code = response.status
+        while redirects < 3:
+            status_code, location = await _request_with_retries(session, 'HEAD', current_url, client_timeout)
             
-        if status_code in (403, 405):
-            async with session.get(target_url, allow_redirects=True, timeout=client_timeout) as response:
-                status_code = response.status
+            if status_code in (403, 405):
+                status_code, location = await _request_with_retries(session, 'GET', current_url, client_timeout)
+                
+            if 300 <= status_code < 400 and location:
+                next_url = urljoin(current_url, location)
+                if not is_valid_url(next_url):
+                    error_message = "Blocked Redirect (SSRF)"
+                    status_code = 403
+                    break
+                current_url = next_url
+                redirects += 1
+            else:
+                break
                 
         if 200 <= status_code < 400:
             is_alive = True
@@ -90,6 +114,7 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
         
         result = {
             "target_url": target_url,
+            "source_url": source_url,
             "status_code": status_code,
             "error_message": error_message,
             "is_alive": is_alive,
@@ -105,6 +130,8 @@ async def crawler_worker(queue, source_url, session, on_progress, user_id, delay
     while True:
         target_url = await queue.get()
         try:
+            if target_url is None:
+                break
             result = await check_single_link(
                 target_url=target_url, 
                 source_url=source_url, 
@@ -136,7 +163,7 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
             await fire_callback(on_init, {"error": str(e)})
             return {"error": str(e)}
             
-        is_xml = start_url.lower().endswith('.xml') or content.strip().startswith('<?xml') or '<urlset' in content
+        is_xml = start_url.lower().endswith('.xml') or content.strip().lower().startswith('<?xml') or '<urlset' in content.lower()
         
         if is_xml:
             links = extract_sitemap_links(content)
@@ -163,11 +190,16 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         for link in links:
             queue.put_nowait(link)
             
+        num_workers = max(1, min(safe_concurrency, len(links)))
+        
+        # Enqueue sentinels to cleanly shutdown workers
+        for _ in range(num_workers):
+            queue.put_nowait(None)
+            
         results_list = []
         workers = []
         
         # Spawn N worker tasks
-        num_workers = max(1, min(safe_concurrency, len(links)))
         for _ in range(num_workers):
             worker = asyncio.create_task(crawler_worker(
                 queue=queue, 
@@ -186,10 +218,7 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         except asyncio.TimeoutError:
             pass # Timeout reached, we will process whatever results we have so far
         
-        # Cancel all worker tasks since they are infinite loops
-        for worker in workers:
-            worker.cancel()
-        
+        # Wait for workers to cleanly finish
         await asyncio.gather(*workers, return_exceptions=True)
         
         alive_count = sum(1 for r in results_list if r['is_alive'])
