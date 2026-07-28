@@ -21,10 +21,12 @@ def is_valid_url(url):
 async def fire_callback(callback, data):
     if not callback:
         return
-    if inspect.iscoroutinefunction(callback):
-        await callback(data)
-    else:
-        callback(data)
+    try:
+        result = callback(data)
+        if inspect.isawaitable(result):
+            await result
+    except Exception as e:
+        print(f"Callback Error: {e}")
 
 async def fetch_html(url, session):
     """Fetches the HTML content of the starting URL."""
@@ -43,6 +45,8 @@ def extract_links(html_content, base_url):
         href = a_tag.get('href')
         if href:
             full_url = urljoin(base_url, href)
+            # Strip fragments for deduplication
+            full_url = full_url.split('#')[0]
             if is_valid_url(full_url):
                 links.add(full_url)
     return list(links)
@@ -69,7 +73,7 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
         async with session.head(target_url, allow_redirects=True, timeout=client_timeout) as response:
             status_code = response.status
             
-        if status_code == 405:
+        if status_code in (403, 405):
             async with session.get(target_url, allow_redirects=True, timeout=client_timeout) as response:
                 status_code = response.status
                 
@@ -79,7 +83,7 @@ async def check_single_link(target_url, source_url, session, timeout=10, on_prog
     except asyncio.TimeoutError:
         error_message = "Timeout"
     except Exception as e:
-        error_message = type(e).__name__
+        error_message = f"{type(e).__name__}: {str(e)}"
     finally:
         end_time = time.time()
         response_time_ms = int((end_time - start_time) * 1000)
@@ -123,8 +127,9 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
     
     # Apply security restrictions
     safe_concurrency = security.get_safe_concurrency(concurrency)
+    connector = aiohttp.TCPConnector(limit=safe_concurrency)
     
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
         try:
             content = await fetch_html(start_url, session)
         except Exception as e:
@@ -162,7 +167,8 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         workers = []
         
         # Spawn N worker tasks
-        for _ in range(safe_concurrency):
+        num_workers = max(1, min(safe_concurrency, len(links)))
+        for _ in range(num_workers):
             worker = asyncio.create_task(crawler_worker(
                 queue=queue, 
                 source_url=start_url, 
@@ -183,6 +189,8 @@ async def run_crawl(start_url, concurrency=50, delay=0.0, on_progress=None, on_i
         # Cancel all worker tasks since they are infinite loops
         for worker in workers:
             worker.cancel()
+        
+        await asyncio.gather(*workers, return_exceptions=True)
         
         alive_count = sum(1 for r in results_list if r['is_alive'])
         dead_count = len(results_list) - alive_count
