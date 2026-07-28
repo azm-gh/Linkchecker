@@ -1,18 +1,19 @@
-# Link Checker
+# Link Checker (SaaS Architecture)
 
-A high-performance, full-stack asynchronous web link checker built with Python's `asyncio`, `aiohttp`, and a real-time **FastAPI** web interface. 
+A high-performance, full-stack asynchronous web link checker built with Python's `asyncio`, a **FastAPI** backend, and a modern **React (Vite)** frontend.
 
-It extracts links from standard webpages or massive XML Sitemaps, concurrently verifies their status, evades basic bot protections, and persists detailed analytics into an SQLite database.
+It extracts links from standard webpages or massive XML Sitemaps, concurrently verifies their status, evades basic bot protections, and saves detailed analytics to **Google Cloud Firestore**.
 
 ## 🚀 Features
 
-*   **Real-time Web UI:** A stunning, modern web interface powered by WebSockets. Watch the results stream in live as the engine audits your links.
+*   **Modern React UI:** A beautiful, responsive Single Page Application built with Vite. Features physics-based `framer-motion` animations and `sonner` toast notifications following modern Design Engineering principles.
+*   **Firebase Authentication:** Secure email/password login and registration using the Firebase Client SDK.
+*   **Real-time WebSockets:** Watch the results stream in live to the frontend as the backend engine audits your links.
+*   **History Dashboard:** All past scans are securely persisted to Firestore. Users can easily view their historical website health.
+*   **CSV Export:** Instantly download any completed scan as a fully formatted CSV file.
+*   **Scheduled Scans (Cron):** Users can set up automated Daily, Weekly, or Monthly background audits. The backend features a secure webhook designed to be triggered by Google Cloud Scheduler, executing headless crawls and mocking email delivery.
 *   **XML Sitemap Auditing:** Feed it a `.xml` file, and it automatically parses the `<loc>` tags to audit an entire website in one click.
-*   **Lightning Fast Concurrency:** Uses `asyncio` to check dozens of links simultaneously instead of waiting for each server sequentially.
-*   **Bot Evasion & Pacing:** Implement configurable dispatch delays (Request Pacing) to stagger requests and avoid `429 Too Many Requests` bans.
-*   **Security & Blocklists:** Built-in safeguards automatically skip massive domains that block bots (like LinkedIn and Amazon) and strictly cap concurrency to prevent SSRF abuse.
-*   **SQLite Persistence:** All results, including millisecond response times, source URLs, and status codes, are saved to a local `links.db` database for powerful analytics.
-*   **CLI Fallback:** Still prefer the terminal? A fully functional command-line interface with `colorama` output is included.
+*   **Lightning Fast Concurrency:** Uses Python's `asyncio` to check dozens of links simultaneously instead of waiting for each server sequentially.
 
 ## 🛠 Installation
 
@@ -20,61 +21,67 @@ It extracts links from standard webpages or massive XML Sitemaps, concurrently v
 2. Create and activate a Python virtual environment:
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
+   source venv/bin/activate
    ```
-3. Install the required dependencies:
+3. Install the required backend dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-
-## 🌐 Usage (Web Interface)
-
-The best way to use the Link Checker is via the real-time FastAPI web interface.
-
-1. Start the web server:
+4. Install the frontend dependencies:
    ```bash
-   uvicorn app:app --host 127.0.0.1 --port 8000
+   cd frontend
+   npm install
    ```
-2. Open your browser to `http://127.0.0.1:8000`.
-3. Enter your target URL (HTML page or `sitemap.xml`) and click **Start Scan**.
+5. Ensure you have your `serviceAccountKey.json` from Firebase Admin placed in the root directory for local database access.
 
-## 💻 Usage (Command Line)
+## 🌐 Usage (Local Development)
 
-If you prefer the terminal, you can run the core engine directly:
+You need to run both the FastAPI backend and the Vite development server.
+
+1. **Start the Backend (Terminal 1):**
+   ```bash
+   source venv/bin/activate
+   uvicorn app:app --reload
+   ```
+
+2. **Start the Frontend (Terminal 2):**
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. Open your browser to `http://localhost:5173`.
+
+## ☁️ Production Deployment (Google Cloud Run)
+
+The repository is configured to easily deploy as a single container to Google Cloud Run. The React frontend is built and served statically by FastAPI.
+
+1. Build the React frontend:
+   ```bash
+   cd frontend
+   npm run build
+   ```
+2. Deploy the backend (which now includes the static React files):
+   ```bash
+   gcloud run deploy link-checker --source . --project <your-project-id> --region <your-region> --allow-unauthenticated
+   ```
+
+## ⏱ Background Cron Jobs
+
+To enable Scheduled Scans, create a Google Cloud Scheduler job that pings the secure webhook every hour:
 
 ```bash
-# Check an HTML page
-python cli.py https://example.com
-
-# Check an entire Sitemap
-python cli.py https://example.com/sitemap.xml
-```
-
-### Advanced CLI Options
-*   `-c` / `--concurrency`: Limits the maximum number of requests "in flight" at the same time (Default: 50).
-*   `-d` / `--delay`: The delay in seconds before firing the next background task. Excellent for bypassing rate limits (Default: 0.0).
-
-```bash
-python cli.py https://example.com -c 20 -d 0.5
-```
-
-## 📊 Analytics & Database
-
-Every scan automatically appends the results to `links.db`. You can open this database with any standard SQLite viewer or query it directly from your terminal:
-
-```bash
-# Find the 5 slowest links on your site:
-sqlite3 links.db "SELECT target_url, response_time_ms FROM link_checks ORDER BY response_time_ms DESC LIMIT 5;"
-
-# Find all broken links (404 Not Found):
-sqlite3 links.db "SELECT target_url FROM link_checks WHERE status_code = 404;"
+gcloud scheduler jobs create http trigger-link-checker \
+  --schedule="0 * * * *" \
+  --uri="https://<your-cloud-run-url>/api/cron/run-schedules" \
+  --http-method=POST \
+  --headers="Authorization=Bearer super-secret-cron-token-123"
 ```
 
 ## 📂 Project Structure
 
+*   `frontend/`: The modern React/Vite SPA.
 *   `crawler.py`: The core asynchronous `asyncio` crawling engine.
-*   `app.py`: The FastAPI backend handling WebSockets.
-*   `cli.py`: The Command-Line interface wrapper.
-*   `db.py`: Handles SQLite database initialization and data insertion.
-*   `security.py`: Domain blocklists and SSRF concurrency caps.
-*   `templates/` & `static/`: HTML, CSS, and JS for the web interface.
+*   `app.py`: The FastAPI backend handling WebSockets, Auth, and REST endpoints.
+*   `db.py`: Handles Google Cloud Firestore integration.
+*   `security.py`: Domain blocklists and rate limit controls.
